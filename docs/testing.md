@@ -4,53 +4,55 @@
 
 | 確認 | 結果 |
 |---|---|
-| TypeScript | `npm run typecheck` 成功 |
-| 本番ビルド | `npm run build` 成功 |
-| 単体テスト | 9件成功。タイマー区間・日跨ぎ・重複・旧形式、認証設定、state/PKCE、cookie/session、ID token署名/issuer/audience/expiry、入力検証 |
-| Worker/D1統合 | 未認証・偽装ヘッダー拒否、ユーザー分離、CSRF、汎用APIのタイマー上書き拒否、revision競合、同時更新、ログアウト失効が成功 |
-| ブラウザー | 3件成功。未設定503、タイマー開始/4秒同期/停止/終了、振り返り、390×844で操作ボタンと今日の集中時間を確認 |
-| 画面資料 | 本番ビルドの `/demo` をChromiumで撮影。1440×960のPCと390×844のスマホ。実データなし |
-| npm audit | 既知の脆弱性0件（検査時点） |
-| ESLint | エラーなし。既存タイマーUI由来のhook依存等の警告は残存 |
+| TypeScript・本番ビルド | 成功 |
+| 単体テスト | 13件成功。認証、入力互換、区間集計、単調増加時計、再試行ゲート |
+| Worker/D1統合 | 未認証・偽装ヘッダー拒否、ユーザー分離、CSRF、予約ID拒否、revision競合、同時更新、ログアウト失効が成功 |
+| ブラウザー | 14件成功。デモ3件、認証済み画面6件、タイマー同期5件 |
+| 画面資料 | `/demo` の実画面。PCとスマホ、架空データのみ |
+| npm audit | 依存変更なし。前回検査の既知脆弱性0件 |
+| ESLint | エラーなし。既存UI由来のhook依存等の警告は残存 |
 
-## ブラウザーテスト
-
-```sh
-npx playwright install chromium
-npm run build
-npm start -- --port 8787
-# 別ターミナル。認証変数なしのサーバーを使用
-npm run test:browser -- tests/browser/demo.spec.ts
-```
-
-`docs/screenshots` の画像もこのテストで更新されます。認証済み本番画面を撮影するコードはありません。
-
-## 実Worker/D1の統合テスト
+## 回帰テストの実行
 
 ```sh
+npm ci
 npm run db:migrate:local
 npm run build
+npx playwright install chromium
+npm run typecheck
+npm test
+npm run lint
+npm run test:browser
+```
+
+Playwrightがローカル本番ビルドを8787（認証未設定）と8788（架空の認証設定）で起動します。実際のGoogle認証情報は不要です。`.dev.vars` に実際の値を置いた開発環境とは分けて実行してください。各テストはランダムな架空ユーザーと短命cookieを作り、終了時に当該ユーザーの行だけ削除します。
+
+`tests/browser/authenticated.spec.ts` は、実Worker/D1に対して以下を検証します。
+
+- 実ブラウザーのログアウトフォーム送信、cookie破棄、コピー済みセッションの失効、外部/null/欠落Originの拒否
+- タイマー開始→一時停止→終了→再読込後のメモ保存と消去
+- 数値で保存された旧deletedフラグの互換性
+- タスクの分類を「未分類」へ変更
+- 再開・再停止・終了後もメモと消去状態を維持
+
+`tests/browser/timer-sync.spec.ts` は端末時計の±1時間のずれと途中変更、未完了のsettle応答、503時の再試行間隔、409直後の再同期、サーバー確定時の一度だけの記録を検証します。503/409などの障害応答はブラウザーの通信層で注入します。
+
+`tests/browser/demo.spec.ts` では未設定時503、基本操作、スマホの初期表示を確認し、`docs/screenshots` の架空データ画像も更新します。
+
+## APIのみの統合テスト
+
+```sh
 npm start -- --port 8788 --var APP_ENV:development --var APP_ORIGIN:http://127.0.0.1:8788 --var GOOGLE_CLIENT_ID:fixture-client --var GOOGLE_CLIENT_SECRET:fixture-secret
 # 別ターミナル
 node scripts/test-api.mjs
 ```
 
-ここに示すclient値は無効な架空値です。実際のGoogleログインには使えません。スクリプトはローカルDBに短命な架空ユーザーセッションを作り、終了時にそのユーザーの行を削除します。ローカル専用であり、接続先はコードで127.0.0.1に固定しています。
+このclient値は無効な架空値です。接続先は127.0.0.1に固定しており、本番向けの実行手順ではありません。
 
-## 公開前検査
+## 公開前検査と限界
 
-`node scripts/scan-public.mjs` はGit管理対象の禁止パスと既知の秘密値形式を検査します。これに加え、公開するテキスト中のメールアドレス・URL・運用ID候補と画面画像を目視確認します。スキャナーだけで秘密情報の完全な不存在を保証するものではありません。
+`node scripts/scan-public.mjs` はGit管理対象の禁止パスと既知の秘密値形式を検査します。公開テキスト・画面画像の目視確認も併用します。
 
-Google OAuthの実アカウント往復ログインは未実施です。Google Cloudの登録と秘密値発行は運用者が行い、配置先で確認してください。通知許可、画面ロック中の通知、物理端末間の通信遅延は環境依存です。自動テストの同期確認はローカルWorkerと複数リクエストによるものです。
+Google OAuthの実アカウント往復ログインは未実施です。Google Cloud登録、秘密値発行、配置先での確認は運用者が行います。画面ロック中の通知と物理端末間の通信遅延は環境依存です。ブラウザーテストはローカル本番ビルドで行っています。
 
-依存更新時はビルド・型・単体・ブラウザー・統合テストを再実行してください。`satori`の`fflate`とTypeScript ESLintの`minimatch`は既知脆弱性修正版に限定してoverrideしています。
-
-## 認証済み画面のブラウザー回帰テスト
-
-上記の8788番ローカルサーバーを起動してから、次を実行します。
-
-```sh
-npm run test:browser -- tests/browser/authenticated.spec.ts
-```
-
-実際のWorker/D1を使用し、ランダムな架空ユーザーと短命cookieをテストごとに作成・削除します。ログアウトのフォーム送信、cookie破棄、サーバー側失効、外部Origin拒否、停止→終了後のメモ編集、旧形式真偽値の互換性、未分類への変更、再開後のメモ・消去状態維持を検証します。Google認証の実登録は不要です。
+CIにも単体・ブラウザー・型・ビルド・秘密情報検査を設定しています。CIの成功は実際のワークフロー結果で確認してください。依存更新時は同じ検証を再実行します。

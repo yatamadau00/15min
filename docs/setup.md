@@ -21,7 +21,7 @@
 3. 本番Workerへ `APP_ORIGIN` を設定し、`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` はWrangler secrets等の秘密値機能で設定します。本番では `APP_ENV=development` を使いません。
 4. 対象DB・アカウントを確認したうえでマイグレーションを適用します。ローカル用は `npm run db:migrate:local`、運用DB用は `npx wrangler d1 migrations apply DB --remote` です。
 5. `npm run build` 後、対象を確認して `npx wrangler deploy --config dist/server/wrangler.json` で配置します。生成設定にも意図したbindingsが入っていることを確認します。
-6. 正規URLでGoogleログイン、データ保存、別アカウント分離、ログアウト、別端末の同期を確認します。端末時刻が大きくずれている場合は自動時刻設定を使用してください。
+6. 正規URLでGoogleログイン、データ保存、別アカウント分離、ログアウト、別端末の同期を確認します。タイマー残り時間はサーバー時刻で補正します。予定入力や手動記録の現在時刻には端末時刻も使うため、端末は自動時刻設定を推奨します。
 
 認証変数かDB bindingが欠けると保護された入口は503になります。マイグレーション未適用などのDB障害時もデータアクセスは成功しません。
 

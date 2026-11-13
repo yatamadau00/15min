@@ -18,5 +18,8 @@ jobs:
       - run: npm test
       - run: npm run lint
       - run: npm run build
+      - run: npm run db:migrate:local
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
       - run: npm audit --audit-level=high
       - run: node scripts/scan-public.mjs

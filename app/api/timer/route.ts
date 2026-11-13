@@ -19,5 +19,5 @@ export async function POST(req:Request){
  statements.push(db.prepare('INSERT INTO planner_items(id,owner,data) SELECT ?,?,? WHERE '+condition+' ON CONFLICT(id) DO UPDATE SET data=excluded.data').bind(id,u.userId,JSON.stringify(result.timer),...match));
  const responses=await db.batch(statements);
  if(!responses.at(-1)?.meta.changes)return Response.json({error:'別端末で更新されました。再度操作してください。'},{status:409});
- return Response.json(result,{headers:{'Cache-Control':'no-store'}});
+ return Response.json({...result,serverNow:Date.now()},{headers:{'Cache-Control':'no-store'}});
 }

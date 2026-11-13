@@ -6,7 +6,7 @@ import { eq, and } from 'drizzle-orm';
 export async function GET() {
  const user = await getGoogleUser(); if(!user) return new Response(null,{status:401});
  const rows = await getDb().select().from(items).where(eq(items.owner,user.userId));
- return Response.json(rows.map(row=>JSON.parse(row.data)),{headers:{'Cache-Control':'no-store'}});
+ return Response.json(rows.map(row=>JSON.parse(row.data)),{headers:{'Cache-Control':'no-store','X-Server-Time':String(Date.now())}});
 }
 export async function POST(req:Request) {
  const user = await getGoogleUser(); if(!user) return new Response(null,{status:401});

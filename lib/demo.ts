@@ -14,10 +14,10 @@ export function createDemoTransport() {
     const args=JSON.parse(String(options?.body));const old=rows.find(r=>r.kind==='timer');
     const result=transition(old,args.action,Date.now(),args);
     for(const r of [result.timer,...result.sessions]) rows=[...rows.filter(x=>x.id!==r.id),r];
-    return Response.json(result);
+    return Response.json({...result,serverNow:Date.now()});
    }
    if(options?.method==='POST') {const value=JSON.parse(String(options.body));rows=[...rows.filter(r=>r.id!==value.id),value];return Response.json({ok:true});}
    if(options?.method==='DELETE') {const id=new URL(url,'https://demo.invalid').searchParams.get('id');rows=rows.filter(r=>r.id!==id);return Response.json({ok:true});}
-   return Response.json(rows);
+   return Response.json(rows,{headers:{'X-Server-Time':String(Date.now())}});
  };
 }
