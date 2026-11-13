@@ -10,7 +10,7 @@
 4. `APP_ORIGIN` を同じoriginに設定します。ローカルHTTPは `APP_ENV=development` とループバックホストの組合せのみ許可されます。
 5. 必要なら `AUTH_ALLOWED_EMAILS` を指定します。空欄の場合は任意の検証済みGoogleアカウントを受け付けますが、データは各アカウントに分離されます。
 
-要求するscopeは `openid email profile` のみです。カレンダー権限・refresh tokenは取得しません。Googleのaccess tokenやID tokenはセッション作成後に保存しません。
+要求するscopeは `openid email profile` のみです。refresh tokenは取得しません。Googleのaccess tokenやID tokenはセッション作成後に保存しません。
 
 参考: [Google OpenID Connect公式資料](https://developers.google.com/identity/openid-connect/openid-connect)、[API reference](https://developers.google.com/identity/openid-connect/reference)。
 
