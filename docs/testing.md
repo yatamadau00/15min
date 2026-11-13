@@ -20,7 +20,7 @@ npx playwright install chromium
 npm run build
 npm start -- --port 8787
 # 別ターミナル。認証変数なしのサーバーを使用
-npm run test:browser
+npm run test:browser -- tests/browser/demo.spec.ts
 ```
 
 `docs/screenshots` の画像もこのテストで更新されます。認証済み本番画面を撮影するコードはありません。
@@ -44,3 +44,13 @@ node scripts/test-api.mjs
 Google OAuthの実アカウント往復ログインは未実施です。Google Cloudの登録と秘密値発行は運用者が行い、配置先で確認してください。通知許可、画面ロック中の通知、物理端末間の通信遅延は環境依存です。自動テストの同期確認はローカルWorkerと複数リクエストによるものです。
 
 依存更新時はビルド・型・単体・ブラウザー・統合テストを再実行してください。`satori`の`fflate`とTypeScript ESLintの`minimatch`は既知脆弱性修正版に限定してoverrideしています。
+
+## 認証済み画面のブラウザー回帰テスト
+
+上記の8788番ローカルサーバーを起動してから、次を実行します。
+
+```sh
+npm run test:browser -- tests/browser/authenticated.spec.ts
+```
+
+実際のWorker/D1を使用し、ランダムな架空ユーザーと短命cookieをテストごとに作成・削除します。ログアウトのフォーム送信、cookie破棄、サーバー側失効、外部Origin拒否をブラウザーから検証します。Google認証の実登録は不要です。
