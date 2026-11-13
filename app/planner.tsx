@@ -1,6 +1,7 @@
 'use client';
 import {useState,useEffect,useRef} from 'react';
 import ActivityLog from './activity-log';
+import {createSyncGuard} from '../lib/sync-guard';
 import {itemPayload} from '../lib/item-payload';
 import {createDemoTransport} from '../lib/demo';
 import {createServerClock,createSettlementGate} from '../lib/timer-client';
@@ -17,6 +18,7 @@ export default function Planner({demo=false}:{demo?:boolean}){
  const currentTimer=useRef<Item|null>(null),actionLock=useRef(false);
  const settings=useRef<HTMLDialogElement|null>(null);
  const audio=useRef<AudioContext|null>(null),timerRevision=useRef(0),notifiedRun=useRef('');
+ const [syncGuard]=useState(()=>createSyncGuard());
  const [serverClock]=useState(()=>createServerClock());
  const [settlementGate]=useState(()=>createSettlementGate());
 
@@ -42,26 +44,27 @@ export default function Planner({demo=false}:{demo?:boolean}){
   settlementGate.finish(!!result&&result.timer.state!=='running');
  }
  async function refresh(allowSettle=true){
-  try{const r=await transport('/api/items');if(!r.ok)throw Error();const rows:Item[]=await r.json();
+  const ticket=syncGuard.read();if(!ticket)return;
+  try{const r=await transport('/api/items');if(!r.ok)throw Error();const rows:Item[]=await r.json();if(!syncGuard.accepts(ticket))return;
    serverClock.sync(Number(r.headers.get('X-Server-Time')??NaN));
-   setData(rows.filter(x=>x.kind!=='timer'));const t=rows.find(x=>x.kind==='timer');if(t)adopt(t);setError('');if(allowSettle)await settleTimer();
-  }catch{setError('読み込みに失敗しました。通信を確認して再読み込みしてください。')}finally{setLoading(false)}
+   setData(rows.filter(x=>x.kind!=='timer'));const t=rows.find(x=>x.kind==='timer');if(t)adopt(t);setError('');setLoading(false);if(allowSettle)await settleTimer();
+  }catch{if(syncGuard.accepts(ticket))setError('読み込みに失敗しました。通信を確認して再読み込みしてください。')}finally{if(syncGuard.accepts(ticket))setLoading(false)}
  }
  useEffect(()=>{setDate(day());refresh();setReady(true);const h=()=>refresh();window.addEventListener('focus',h);const poll=setInterval(refresh,4000);return()=>{window.removeEventListener('focus',h);clearInterval(poll)}},[]);
  async function timerAction(action:string,selectedId=selected):Promise<{timer:Item;sessions:Item[];legacy?:boolean}|null>{
-  if(actionLock.current)return null;actionLock.current=true;setBusy(true);
+  if(actionLock.current)return null;actionLock.current=true;setBusy(true);const finishWrite=syncGuard.write();
   try{const title=[...defaultCategories,...data].find(x=>x.id===selectedId)?.title||'研究';
    const r=await transport('/api/timer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,revision:timerRevision.current,selected:selectedId,title,runId:crypto.randomUUID(),timezone:'Asia/Tokyo'})});
    const result:any=await r.json();
-   if(r.status===409){await refresh(false);if(action==='settle'&&currentTimer.current?.state==='completed')return {timer:currentTimer.current,sessions:[]};}
+   if(r.status===409){finishWrite();await refresh(false);if(action==='settle'&&currentTimer.current?.state==='completed')return {timer:currentTimer.current,sessions:[]};}
    if(!r.ok)throw Error(result.error||'タイマーを保存できませんでした');
    serverClock.sync(result.serverNow);
    adopt(result.timer);setData(rows=>{let next=[...rows];for(const x of result.sessions||[])next=[...next.filter(y=>y.id!==x.id),x];return next});
    if(result.legacy&&currentTimer.current?.state==='idle')setNotice('以前のタイマー状態を更新しました。新しい計測を開始できます。旧記録は保持しています。');
    setError('');return result;
-  }catch(e){setError(String(e));return null}finally{actionLock.current=false;setBusy(false)}
+  }catch(e){setError(String(e));return null}finally{finishWrite();actionLock.current=false;setBusy(false)}
  }
- async function save(x:Item){setBusy(true);try{const r=await transport('/api/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(itemPayload(x))});if(!r.ok)throw Error();if(x.kind!=='timer')setData(a=>[...a.filter(t=>t.id!==x.id),x]);setError('');return true}catch{setError('保存できませんでした。入力内容はそのままです。再度お試しください。');return false}finally{setBusy(false)}}
+ async function save(x:Item){const finishWrite=syncGuard.write();setBusy(true);try{const r=await transport('/api/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(itemPayload(x))});if(!r.ok)throw Error();if(x.kind!=='timer')setData(a=>[...a.filter(t=>t.id!==x.id),x]);setError('');return true}catch{setError('保存できませんでした。入力内容はそのままです。再度お試しください。');return false}finally{finishWrite();setBusy(false)}}
 
  useEffect(()=>{
   if(!end)return;
@@ -72,7 +75,7 @@ export default function Planner({demo=false}:{demo?:boolean}){
  function pause(){timerAction('pause')}
  function reset(){setNotice('');timerAction('reset')}
  async function notify(){if(!('Notification'in window)){setNotice('このブラウザでは通知に対応していません。');return}const p=await Notification.requestPermission();setNotice(p==='granted'?'通知を有効にしました。':'通知は無効です。画面内で終了をお知らせします。')}
- async function remove(x:Item){if(!confirm(`「${x.title}」を削除しますか？`))return;try{const r=await transport('/api/items?id='+encodeURIComponent(x.id),{method:'DELETE'});if(!r.ok)throw Error();setData(a=>a.filter(t=>t.id!==x.id));setEditor(null)}catch{setError('削除できませんでした')}}
+ async function remove(x:Item){if(!confirm(`「${x.title}」を削除しますか？`))return;const finishWrite=syncGuard.write();try{const r=await transport('/api/items?id='+encodeURIComponent(x.id),{method:'DELETE'});if(!r.ok)throw Error();setData(a=>a.filter(t=>t.id!==x.id));setEditor(null)}catch{setError('削除できませんでした')}finally{finishWrite()}}
  const categories=[...defaultCategories,...data.filter(x=>x.kind==='category')];
  const tasks=data.filter(x=>x.kind==='task'),sessions=data.filter(x=>x.kind==='session'&&x.date===day()),active=categories.find(x=>x.id===selected);
  const filtered=data.filter(x=>x.kind!=='session'&&x.kind!=='timer'&&x.kind!=='category'&&(!categoryFilter||x.categoryId===categoryFilter)&&(showDone||!x.done)&&(mode==='all'||(mode==='undated'?!x.date:mode==='today'?x.date===date:!!x.date&&x.date>=date&&x.date<day(new Date(new Date(date+'T00:00').getTime()+7*86400000))))).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time)||Number(b.priority==='high')-Number(a.priority==='high'));
