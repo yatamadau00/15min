@@ -1,0 +1,54 @@
+{
+  "name": "15min",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "start": "wrangler dev --config dist/server/wrangler.json --local --ip 127.0.0.1 --persist-to .wrangler/state",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "lint": "eslint . --ignore-pattern dist",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "test:browser": "playwright test"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.2",
+    "jose": "^6.2.17",
+    "next": "16.4.6",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.69.1",
+    "@cloudflare/workers-types": "5.20261113.1",
+    "@playwright/test": "^1.65.0",
+    "@tailwindcss/postcss": "4.2.1",
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.2",
+    "@vitejs/plugin-rsc": "0.5.39",
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.4.6",
+    "react-server-dom-webpack": "19.3.1",
+    "tailwindcss": "4.2.1",
+    "typescript": "5.9.3",
+    "vinext": "1.4.5",
+    "vite": "8.3.8",
+    "wrangler": "4.161.0"
+  },
+  "type": "module",
+  "overrides": {
+    "satori": {
+      "fflate": "0.8.3"
+    },
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "11.0.8"
+    }
+  }
+}

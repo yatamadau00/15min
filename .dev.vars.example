@@ -1,0 +1,7 @@
+# Copy to .dev.vars for local development. Never commit .dev.vars.
+APP_ENV="development"
+APP_ORIGIN="http://localhost:5173"
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+# Optional comma-separated exact addresses. Empty allows any verified Google user.
+AUTH_ALLOWED_EMAILS=""
