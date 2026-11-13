@@ -1,6 +1,7 @@
 'use client';
 import {useState,useEffect,useRef} from 'react';
 import ActivityLog from './activity-log';
+import {timerResponse,ApiResponseError} from '../lib/api-response';
 import {createSyncGuard} from '../lib/sync-guard';
 import {itemPayload} from '../lib/item-payload';
 import {createDemoTransport} from '../lib/demo';
@@ -55,14 +56,13 @@ export default function Planner({demo=false}:{demo?:boolean}){
   if(actionLock.current)return null;actionLock.current=true;setBusy(true);const finishWrite=syncGuard.write();
   try{const title=[...defaultCategories,...data].find(x=>x.id===selectedId)?.title||'研究';
    const r=await transport('/api/timer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,revision:timerRevision.current,selected:selectedId,title,runId:crypto.randomUUID(),timezone:'Asia/Tokyo'})});
-   const result:any=await r.json();
    if(r.status===409){finishWrite();await refresh(false);if(action==='settle'&&currentTimer.current?.state==='completed')return {timer:currentTimer.current,sessions:[]};}
-   if(!r.ok)throw Error(result.error||'タイマーを保存できませんでした');
+   const result=await timerResponse<Item>(r);
    serverClock.sync(result.serverNow);
    adopt(result.timer);setData(rows=>{let next=[...rows];for(const x of result.sessions||[])next=[...next.filter(y=>y.id!==x.id),x];return next});
    if(result.legacy&&currentTimer.current?.state==='idle')setNotice('以前のタイマー状態を更新しました。新しい計測を開始できます。旧記録は保持しています。');
    setError('');return result;
-  }catch(e){setError(String(e));return null}finally{finishWrite();actionLock.current=false;setBusy(false)}
+  }catch(e){setError(e instanceof ApiResponseError?e.message:'通信に失敗しました。接続を確認して再度お試しください。');return null}finally{finishWrite();actionLock.current=false;setBusy(false)}
  }
  async function save(x:Item){const finishWrite=syncGuard.write();setBusy(true);try{const r=await transport('/api/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(itemPayload(x))});if(!r.ok)throw Error();if(x.kind!=='timer')setData(a=>[...a.filter(t=>t.id!==x.id),x]);setError('');return true}catch{setError('保存できませんでした。入力内容はそのままです。再度お試しください。');return false}finally{finishWrite();setBusy(false)}}
 
