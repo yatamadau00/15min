@@ -10,10 +10,14 @@ const schema = z.object({
  source:z.enum(['manual','timer','legacy']).optional(),segments:z.array(segment).max(100).optional(),timezone:z.literal('Asia/Tokyo').optional(),
 });
 export function validateItem(input: unknown, old?: Record<string, any>, now = Date.now()): Record<string, any> {
+ if(old?.kind==='session'&&(old.source==='timer'||old.source==='legacy')) {
+  const patch=schema.pick({id:true,memo:true,deleted:true}).extend({kind:z.literal('session')}).parse(input);
+  if(patch.id!==old.id)throw Error('記録IDが一致しません');
+  return {...old,memo:patch.memo??old.memo??'',deleted:!!old.deleted||patch.deleted===true};
+ }
  const value = schema.parse(input);
  if (old && old.kind !== value.kind && !(['task','event'].includes(old.kind)&&['task','event'].includes(value.kind))) throw Error('種類は変更できません');
  if (value.kind !== 'session') return value;
- if (old?.source === 'timer' || old?.source === 'legacy') return {...old, memo:value.memo||'', deleted:!!old.deleted||value.deleted===true};
  if (value.source !== 'manual' || !value.segments || value.segments.length !== 1) throw Error('手動実績が必要です');
  const {start,end} = value.segments[0];
  if (end <= start || end > now || end > 8640000000000000) throw Error('開始・終了を確認してください');

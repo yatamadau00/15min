@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
+import {itemPayload} from '../lib/item-payload.ts';
 import {validateItem} from '../lib/item-validation.ts';
 const item={id:'fixture',kind:'task',title:'Example',date:'',time:'',done:false,priority:'normal'};
 test('reserved timer and malformed items are rejected',()=>{for(const change of [{id:'shared-timer'},{id:'../bad'},{title:''},{title:'x'.repeat(301)},{kind:'timer'}, {kind:'session',source:'timer'}])assert.throws(()=>validateItem({...item,...change}));});
@@ -17,4 +18,17 @@ test('legacy SQLite boolean values are accepted narrowly for record editing',()=
  assert.equal(validateItem({...old,deleted:1},old).deleted,true);
  assert.equal(validateItem({...old,deleted:0},{...old,deleted:1}).deleted,true);
  for(const deleted of ['false',2,null])assert.throws(()=>validateItem({...old,deleted},old));
+});
+
+test('server-owned records with hundreds of intervals use small validated patches',()=>{
+ const segments=Array.from({length:500},(_,i)=>({start:i*2000,end:i*2000+1000}));
+ const old={...item,kind:'session',source:'timer',segments,memo:'before',deleted:false};
+ const payload=itemPayload({...old,memo:'after'});
+ assert.ok(JSON.stringify(payload).length<300);assert.equal('segments' in payload,false);
+ const saved=validateItem(payload,old);assert.deepEqual(saved.segments,segments);assert.equal(saved.memo,'after');
+ assert.equal(validateItem({...payload,deleted:true},old).deleted,true);
+ assert.throws(()=>validateItem({...payload,memo:'x'.repeat(2001)},old));
+ assert.throws(()=>validateItem({...payload,id:'other'},old));
+ assert.throws(()=>validateItem(payload));
+ assert.throws(()=>validateItem({...old,source:'manual'}));
 });

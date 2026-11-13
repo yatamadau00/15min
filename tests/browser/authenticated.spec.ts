@@ -92,3 +92,21 @@ test('resuming and ending a timer preserves its saved memo and deletion flag', a
   const saved=(await (await context.request.get('/api/items')).json()).find((r:any)=>r.id===record.id);
   expect(saved.memo).toBe('維持する架空メモ');expect(saved.deleted).toBe(true);
 });
+
+test('hundreds of timer intervals can be edited and deleted without sending intervals',async({page,context,session})=>{
+ const now=Date.now();const segments=Array.from({length:500},(_,i)=>({start:now-1100000+i*2000,end:now-1099000+i*2000}));
+ const record={id:'many-intervals',kind:'session',title:'架空の多区間実績',date:'',time:'',done:true,priority:'normal',source:'timer',categoryId:'activity-0',segments,memo:'',deleted:false};
+ session.db.prepare('INSERT INTO planner_items VALUES(?,?,?)').run(session.userId+':'+record.id,session.userId,JSON.stringify(record));
+ const writes:any[]=[];page.on('request',r=>{if(r.url().endsWith('/api/items')&&r.method()==='POST')writes.push(r.postDataJSON());});
+ await page.goto('/');await expect(page.getByRole('button',{name:'▶ 15分はじめる'})).toBeEnabled();
+ await page.getByRole('button',{name:'振り返り',exact:true}).click();await page.locator('.log-record').click();
+ await page.getByLabel('メモ（任意）').fill('多区間でも保存できる');await page.getByRole('button',{name:'保存',exact:true}).click();
+ await expect(page.locator('.modal')).toHaveCount(0);
+ let saved=(await (await context.request.get('/api/items')).json()).find((r:any)=>r.id===record.id);
+ expect(saved.segments).toEqual(segments);expect(saved.memo).toBe('多区間でも保存できる');
+ await page.locator('.log-record').click();page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'消去',exact:true}).click();
+ await expect(page.locator('.log-record')).toHaveCount(0);
+ saved=(await (await context.request.get('/api/items')).json()).find((r:any)=>r.id===record.id);
+ expect(saved.deleted).toBe(true);expect(saved.segments).toEqual(segments);
+ expect(writes).toHaveLength(2);for(const payload of writes){expect(payload.segments).toBeUndefined();expect(JSON.stringify(payload).length).toBeLessThan(300);}
+});

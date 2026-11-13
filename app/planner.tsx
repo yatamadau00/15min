@@ -1,6 +1,7 @@
 'use client';
 import {useState,useEffect,useRef} from 'react';
 import ActivityLog from './activity-log';
+import {itemPayload} from '../lib/item-payload';
 import {createDemoTransport} from '../lib/demo';
 import {createServerClock,createSettlementGate} from '../lib/timer-client';
 import {duration,clip,type Segment} from '../lib/tracking';
@@ -60,7 +61,7 @@ export default function Planner({demo=false}:{demo?:boolean}){
    setError('');return result;
   }catch(e){setError(String(e));return null}finally{actionLock.current=false;setBusy(false)}
  }
- async function save(x:Item){setBusy(true);try{const r=await transport('/api/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(x)});if(!r.ok)throw Error();if(x.kind!=='timer')setData(a=>[...a.filter(t=>t.id!==x.id),x]);setError('');return true}catch{setError('保存できませんでした。入力内容はそのままです。再度お試しください。');return false}finally{setBusy(false)}}
+ async function save(x:Item){setBusy(true);try{const r=await transport('/api/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(itemPayload(x))});if(!r.ok)throw Error();if(x.kind!=='timer')setData(a=>[...a.filter(t=>t.id!==x.id),x]);setError('');return true}catch{setError('保存できませんでした。入力内容はそのままです。再度お試しください。');return false}finally{setBusy(false)}}
 
  useEffect(()=>{
   if(!end)return;
