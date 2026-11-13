@@ -24,3 +24,71 @@ test('logout still rejects missing, null and foreign origins', async ({context, 
   }
   expect(session.db.prepare('SELECT count(*) AS n FROM auth_sessions WHERE user_id=?').get(session.userId)?.n).toBe(1);
 });
+
+test('paused then ended timer permits memo editing after server reload and preserves deletion', async ({page, context, session}) => {
+  await page.goto('/');
+  await page.getByRole('button', {name: '▶ 15分はじめる'}).click();
+  await page.getByRole('button', {name: 'Ⅱ 一時停止'}).click();
+  await page.getByRole('button', {name: '終了', exact: true}).click();
+  await expect(page.getByRole('button', {name: '▶ 15分はじめる'})).toBeEnabled();
+  await page.reload();
+  await expect(page.getByRole('button', {name: '▶ 15分はじめる'})).toBeEnabled();
+  const before = (await (await context.request.get('/api/items')).json()).find((r: any) => r.kind === 'session');
+  expect(before.deleted).toBe(false);
+  await page.getByRole('button', {name: '振り返り', exact: true}).click();
+  await page.locator('.log-record').click();
+  await page.getByLabel('メモ（任意）').fill('架空の実績メモ');
+  await page.getByRole('button', {name: '保存', exact: true}).click();
+  await expect(page.locator('.modal')).toHaveCount(0);
+  const edited = (await (await context.request.get('/api/items')).json()).find((r: any) => r.id === before.id);
+  expect(edited.memo).toBe('架空の実績メモ');
+  expect(edited.segments).toEqual(before.segments);
+  await page.locator('.log-record').click();
+  page.once('dialog', d => d.accept());
+  await page.getByRole('button', {name: '消去', exact: true}).click();
+  await expect(page.locator('.log-record')).toHaveCount(0);
+  const row = session.db.prepare('SELECT data FROM planner_items WHERE id=?').get(session.userId + ':' + before.id);
+  expect(JSON.parse(String(row?.data)).deleted).toBe(true);
+});
+
+test('existing numeric deleted flag remains editable', async ({page, context, session}) => {
+  const record = {id:'legacy-flag',kind:'session',title:'架空の旧形式実績',date:'',time:'',done:true,priority:'normal',source:'timer',categoryId:'activity-0',segments:[{start:Date.now()-60000,end:Date.now()-1000}],deleted:0,memo:''};
+  session.db.prepare('INSERT INTO planner_items VALUES(?,?,?)').run(session.userId+':'+record.id,session.userId,JSON.stringify(record));
+  await page.goto('/');
+  await expect(page.getByRole('button',{name:'▶ 15分はじめる'})).toBeEnabled();
+  await page.getByRole('button',{name:'振り返り',exact:true}).click();
+  await page.locator('.log-record').click();
+  await page.getByLabel('メモ（任意）').fill('互換性テスト');
+  await page.getByRole('button',{name:'保存',exact:true}).click();
+  await expect(page.locator('.modal')).toHaveCount(0);
+  const saved=(await (await context.request.get('/api/items')).json()).find((r:any)=>r.id===record.id);
+  expect(saved.memo).toBe('互換性テスト');expect(saved.deleted).toBe(false);expect(saved.segments).toEqual(record.segments);
+});
+
+test('task category can be cleared to uncategorized through the editor', async ({page, context, session}) => {
+  expect(session.userId).toMatch(/^google:/);
+  const task={id:'category-fixture',kind:'task',title:'架空の分類変更タスク',date:'',time:'',done:false,priority:'normal',categoryId:'activity-0'};
+  expect((await context.request.post('/api/items',{headers:{origin},data:task})).status()).toBe(200);
+  await page.goto('/');await expect(page.getByRole('button',{name:'▶ 15分はじめる'})).toBeEnabled();await page.getByRole('button',{name:'期間なし',exact:true}).click();
+  await page.locator('.item-main').filter({hasText:task.title}).click();
+  await page.locator('.modal form').getByRole('combobox').nth(1).selectOption('');
+  await page.getByRole('button',{name:'保存する',exact:true}).click();
+  await expect(page.locator('.modal')).toHaveCount(0);
+  const saved=(await (await context.request.get('/api/items')).json()).find((r:any)=>r.id===task.id);
+  expect(saved.categoryId).toBeUndefined();expect(saved.title).toBe(task.title);
+});
+
+test('resuming and ending a timer preserves its saved memo and deletion flag', async ({context, session}) => {
+  expect(session.userId).toMatch(/^google:/);
+  let revision=0;
+  const action=async (action:string)=>{
+    const r=await context.request.post('/api/timer',{headers:{origin},data:{action,revision,runId:'preserve-fixture',title:'研究',selected:'activity-0'}});
+    expect(r.status()).toBe(200);const result=await r.json();revision=result.timer.revision;return result;
+  };
+  await action('start');await action('pause');
+  const record=(await (await context.request.get('/api/items')).json()).find((r:any)=>r.kind==='session');
+  expect((await context.request.post('/api/items',{headers:{origin},data:{...record,memo:'維持する架空メモ',deleted:true}})).status()).toBe(200);
+  await action('start');await action('pause');await action('reset');
+  const saved=(await (await context.request.get('/api/items')).json()).find((r:any)=>r.id===record.id);
+  expect(saved.memo).toBe('維持する架空メモ');expect(saved.deleted).toBe(true);
+});

@@ -15,7 +15,7 @@ export async function POST(req:Request){
  let result;try{result=transition(old,a.action,Date.now(),a)}catch(e){return Response.json({error:String(e)},{status:400})}
  const condition=old?'EXISTS(SELECT 1 FROM planner_items WHERE id=? AND data=?)':'NOT EXISTS(SELECT 1 FROM planner_items WHERE id=?)';
  const match=old?[id,row!.data]:[id];
- const statements=result.sessions.map(s=>db.prepare('INSERT INTO planner_items(id,owner,data) SELECT ?,?,? WHERE '+condition+' ON CONFLICT(id) DO UPDATE SET data=json_set(excluded.data,\'$.memo\',COALESCE(json_extract(planner_items.data,\'$.memo\'),\'\'),\'$.deleted\',COALESCE(json_extract(planner_items.data,\'$.deleted\'),0))').bind(u.userId+':'+s.id,u.userId,JSON.stringify(s),...match));
+ const statements=result.sessions.map(s=>db.prepare('INSERT INTO planner_items(id,owner,data) SELECT ?,?,? WHERE '+condition+' ON CONFLICT(id) DO UPDATE SET data=json_set(excluded.data,\'$.memo\',COALESCE(json_extract(planner_items.data,\'$.memo\'),\'\'),\'$.deleted\',json(CASE WHEN json_extract(planner_items.data,\'$.deleted\') THEN \'true\' ELSE \'false\' END))').bind(u.userId+':'+s.id,u.userId,JSON.stringify(s),...match));
  statements.push(db.prepare('INSERT INTO planner_items(id,owner,data) SELECT ?,?,? WHERE '+condition+' ON CONFLICT(id) DO UPDATE SET data=excluded.data').bind(id,u.userId,JSON.stringify(result.timer),...match));
  const responses=await db.batch(statements);
  if(!responses.at(-1)?.meta.changes)return Response.json({error:'別端末で更新されました。再度操作してください。'},{status:409});

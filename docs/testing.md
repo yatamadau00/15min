@@ -53,4 +53,4 @@ Google OAuthの実アカウント往復ログインは未実施です。Google C
 npm run test:browser -- tests/browser/authenticated.spec.ts
 ```
 
-実際のWorker/D1を使用し、ランダムな架空ユーザーと短命cookieをテストごとに作成・削除します。ログアウトのフォーム送信、cookie破棄、サーバー側失効、外部Origin拒否をブラウザーから検証します。Google認証の実登録は不要です。
+実際のWorker/D1を使用し、ランダムな架空ユーザーと短命cookieをテストごとに作成・削除します。ログアウトのフォーム送信、cookie破棄、サーバー側失効、外部Origin拒否、停止→終了後のメモ編集、旧形式真偽値の互換性、未分類への変更、再開後のメモ・消去状態維持を検証します。Google認証の実登録は不要です。
